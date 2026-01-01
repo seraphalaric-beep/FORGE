@@ -1,0 +1,33 @@
+{
+  "name": "forge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FORGE - Community fitness accountability bot for 2026",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "test": "pnpm -r test",
+    "format": "prettier --write \"**/*.{ts,js,json,md}\"",
+    "prisma:generate": "pnpm --filter @forge/shared prisma generate",
+    "prisma:migrate": "pnpm --filter @forge/shared prisma migrate dev",
+    "prisma:studio": "pnpm --filter @forge/shared prisma studio",
+    "integration-test": "tsx scripts/integration-test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "date-fns": "^3.3.1",
+    "date-fns-tz": "^2.0.0",
+    "dotenv": "^16.4.1",
+    "prettier": "^3.2.4",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
+
