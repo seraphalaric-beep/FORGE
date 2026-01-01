@@ -23,10 +23,14 @@ export async function handleInteraction(interaction: Interaction, apiClient: any
         await commands.log.handler(interaction, apiClient);
       } else if (subcommand === 'status' && commands.status) {
         await commands.status.handler(interaction, apiClient);
-      } else if (subcommand === 'admin' && commands.adminSetChannels) {
-        const adminSub = interaction.options.getSubcommand(false);
-        if (adminSub === 'setchannels') {
-          await commands.adminSetChannels.handler(interaction, apiClient);
+      } else {
+        // Check for subcommand groups (e.g., admin)
+        const subcommandGroup = interaction.options.getSubcommandGroup(false);
+        if (subcommandGroup === 'admin' && commands.adminSetChannels) {
+          const adminSub = interaction.options.getSubcommand(false);
+          if (adminSub === 'setchannels') {
+            await commands.adminSetChannels.handler(interaction, apiClient);
+          }
         }
       }
     }

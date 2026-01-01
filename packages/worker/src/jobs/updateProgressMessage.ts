@@ -1,23 +1,13 @@
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { weeks, workouts, commitments } from '@forge/shared';
 
 // This job is debounced - only one update per 15 seconds
 // Called by API after workout logging
-export async function updateProgressMessage(job: Job, prisma: PrismaClient) {
+export async function updateProgressMessage(job: Job) {
   const { weekId } = job.data;
 
   try {
-    const week = await prisma.week.findUnique({
-      where: { id: weekId },
-      include: {
-        _count: {
-          select: {
-            commitments: true,
-            workouts: true,
-          },
-        },
-      },
-    });
+    const week = await weeks.findUnique({ id: weekId });
 
     if (!week) {
       throw new Error(`Week ${weekId} not found`);
@@ -28,8 +18,14 @@ export async function updateProgressMessage(job: Job, prisma: PrismaClient) {
       return;
     }
 
+    // Get counts
+    const [workoutsCount, commitmentsCount] = await Promise.all([
+      workouts.count({ where: { weekId: week.id } }),
+      commitments.findMany({ where: { weekId: week.id } }).then((c) => c.length),
+    ]);
+
     // Format progress message
-    const workoutsLogged = week._count.workouts;
+    const workoutsLogged = workoutsCount;
     const pointsRemaining = Math.max(0, week.goalPoints - week.currentPoints);
     const workoutsRemaining = Math.ceil(pointsRemaining / 10);
 
@@ -41,7 +37,7 @@ export async function updateProgressMessage(job: Job, prisma: PrismaClient) {
     const message = `**FORGE This Week**
 Goal: ${week.currentPoints} / ${week.goalPoints}
 Workouts logged: ${workoutsLogged}
-Members participating: ${week._count.commitments} committed
+Members participating: ${commitmentsCount} committed
 
 Progress:
 \`${progressBar}\`
@@ -60,4 +56,3 @@ ${pointsRemaining > 0 ? `Only ${pointsRemaining} points to go, that is ${workout
     throw error;
   }
 }
-

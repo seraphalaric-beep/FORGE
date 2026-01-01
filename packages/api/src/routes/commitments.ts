@@ -1,7 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createPrismaClient } from '@forge/shared';
-
-const prisma = createPrismaClient();
+import { weeks, users, commitments } from '@forge/shared';
 
 interface SetCommitmentBody {
   discordId: string;
@@ -24,9 +22,7 @@ export async function commitmentRoutes(fastify: FastifyInstance) {
 
     try {
       // Verify week exists and is in OPEN status
-      const week = await prisma.week.findUnique({
-        where: { id: weekId },
-      });
+      const week = await weeks.findUnique({ id: weekId });
 
       if (!week) {
         return reply.code(404).send({ error: 'Week not found' });
@@ -37,17 +33,19 @@ export async function commitmentRoutes(fastify: FastifyInstance) {
       }
 
       // Get or create user
-      const user = await prisma.user.upsert({
+      const user = await users.upsert({
         where: { discordId },
         update: {},
         create: {
           discordId,
           isActive: true,
+          joinedAt: new Date(),
+          timezone: 'Europe/Dublin',
         },
       });
 
       // Upsert commitment (overwrites if exists)
-      const commitment = await prisma.commitment.upsert({
+      const commitment = await commitments.upsert({
         where: {
           userId_weekId: {
             userId: user.id,
@@ -61,6 +59,7 @@ export async function commitmentRoutes(fastify: FastifyInstance) {
           userId: user.id,
           weekId: week.id,
           committedWorkouts,
+          updatedAt: new Date(),
         },
       });
 
@@ -71,4 +70,3 @@ export async function commitmentRoutes(fastify: FastifyInstance) {
     }
   });
 }
-

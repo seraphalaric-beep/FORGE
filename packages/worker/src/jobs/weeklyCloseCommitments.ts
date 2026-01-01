@@ -1,12 +1,11 @@
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
-import { POINTS_PER_WORKOUT } from '@forge/shared';
+import { weeks, commitments, POINTS_PER_WORKOUT } from '@forge/shared';
 
-export async function weeklyCloseCommitments(job: Job, prisma: PrismaClient) {
+export async function weeklyCloseCommitments(job: Job) {
   try {
     // Find the OPEN week
-    const openWeek = await prisma.week.findFirst({
-      where: { status: 'OPEN' },
+    const openWeek = await weeks.findFirst({
+      where: { status: { in: ['OPEN'] } },
       orderBy: { startsAt: 'desc' },
     });
 
@@ -16,15 +15,15 @@ export async function weeklyCloseCommitments(job: Job, prisma: PrismaClient) {
     }
 
     // Calculate goal: sum of all committed workouts * 10
-    const commitments = await prisma.commitment.findMany({
+    const allCommitments = await commitments.findMany({
       where: { weekId: openWeek.id },
     });
 
-    const totalCommittedWorkouts = commitments.reduce((sum, c) => sum + c.committedWorkouts, 0);
+    const totalCommittedWorkouts = allCommitments.reduce((sum, c) => sum + c.committedWorkouts, 0);
     const goalPoints = totalCommittedWorkouts * POINTS_PER_WORKOUT;
 
     // Update week: set goal and status to ACTIVE
-    const updatedWeek = await prisma.week.update({
+    const updatedWeek = await weeks.update({
       where: { id: openWeek.id },
       data: {
         goalPoints,
@@ -45,4 +44,3 @@ export async function weeklyCloseCommitments(job: Job, prisma: PrismaClient) {
     throw error;
   }
 }
-

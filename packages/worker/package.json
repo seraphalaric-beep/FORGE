@@ -12,7 +12,7 @@
     "@forge/shared": "workspace:*",
     "bullmq": "^5.3.0",
     "date-fns": "^3.3.1",
-    "date-fns-tz": "^2.0.0",
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^16.4.1",
     "ioredis": "^5.3.2"
   },

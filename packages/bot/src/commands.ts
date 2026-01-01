@@ -24,8 +24,8 @@ export const forgeCommand = new SlashCommandBuilder()
       .setName('status')
       .setDescription('Check your commitment, workouts, and community progress')
   )
-  .addSubcommand((subcommand) =>
-    subcommand
+  .addSubcommandGroup((group) =>
+    group
       .setName('admin')
       .setDescription('Admin commands')
       .addSubcommand((adminSub) =>
@@ -179,11 +179,60 @@ export const commands = {
         });
       }
 
-      // TODO: Implement channel setting (store in database or config)
-      await interaction.reply({
-        content: 'Channel settings updated (stub - to be implemented)',
-        ephemeral: true,
-      });
+      if (!interaction.guildId) {
+        return interaction.reply({
+          content: '❌ This command can only be used in a server.',
+          ephemeral: true,
+        });
+      }
+
+      try {
+        const commitmentChannel = interaction.options.getChannel('commitment');
+        const progressChannel = interaction.options.getChannel('progress');
+
+        const updateData: any = {};
+        if (commitmentChannel) {
+          updateData.commitmentChannelId = commitmentChannel.id;
+        }
+        if (progressChannel) {
+          updateData.progressChannelId = progressChannel.id;
+        }
+
+        if (Object.keys(updateData).length === 0) {
+          return interaction.reply({
+            content: '❌ Please specify at least one channel to update.',
+            ephemeral: true,
+          });
+        }
+
+        const response = await apiClient.put(`/guilds/${interaction.guildId}`, updateData);
+
+        let message = '✅ Channel settings updated:\n';
+        if (updateData.commitmentChannelId) {
+          message += `• Commitment channel: <#${updateData.commitmentChannelId}>\n`;
+        }
+        if (updateData.progressChannelId) {
+          message += `• Progress channel: <#${updateData.progressChannelId}>\n`;
+        }
+
+        await interaction.reply({
+          content: message,
+          ephemeral: true,
+        });
+      } catch (error: any) {
+        console.error('Error updating channel settings:', error);
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          url: error.config?.url,
+        });
+        const errorMessage = error.response?.data?.error || error.message || 'Failed to update channel settings. Please try again later.';
+        await interaction.reply({
+          content: `❌ ${errorMessage}`,
+          ephemeral: true,
+        });
+      }
     },
   },
 };
