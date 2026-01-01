@@ -1,7 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createPrismaClient, POINTS_PER_WORKOUT } from '@forge/shared';
-
-const prisma = createPrismaClient();
+import {
+  users,
+  weeks,
+  workouts,
+  createWorkoutWithPoints,
+  POINTS_PER_WORKOUT,
+  DEFAULT_TIMEZONE,
+} from '@forge/shared';
 
 interface LogManualWorkoutBody {
   discordId: string;
@@ -19,12 +24,14 @@ export async function workoutRoutes(fastify: FastifyInstance) {
 
     try {
       // Get or create user
-      const user = await prisma.user.upsert({
+      const user = await users.upsert({
         where: { discordId },
         update: {},
         create: {
           discordId,
           isActive: true,
+          joinedAt: new Date(),
+          timezone: DEFAULT_TIMEZONE,
         },
       });
 
@@ -33,7 +40,7 @@ export async function workoutRoutes(fastify: FastifyInstance) {
 
       // Find the week this workout belongs to based on occurredAt
       // Week boundaries: startsAt <= occurredAt < endsAt
-      const week = await prisma.week.findFirst({
+      const week = await weeks.findFirst({
         where: {
           startsAt: {
             lte: workoutOccurredAt,
@@ -55,12 +62,10 @@ export async function workoutRoutes(fastify: FastifyInstance) {
       // This prevents double-logging the same workout
       const sourceEventId = `manual_${user.id}_${workoutOccurredAt.toISOString()}`;
 
-      const existingWorkout = await prisma.workout.findUnique({
-        where: {
-          source_sourceEventId: {
-            source: 'MANUAL',
-            sourceEventId,
-          },
+      const existingWorkout = await workouts.findUnique({
+        source_sourceEventId: {
+          source: 'MANUAL',
+          sourceEventId,
         },
       });
 
@@ -68,42 +73,30 @@ export async function workoutRoutes(fastify: FastifyInstance) {
         return reply.code(409).send({ error: 'This workout has already been logged' });
       }
 
-      // Create workout and update week points atomically
-      const result = await prisma.$transaction(async (tx) => {
-        // Create workout
-        const workout = await tx.workout.create({
-          data: {
-            weekId: week.id,
-            userId: user.id,
-            source: 'MANUAL',
-            sourceEventId,
-            occurredAt: workoutOccurredAt,
-            pointsAwarded: POINTS_PER_WORKOUT,
-          },
-        });
+      // Create workout and update week points atomically using transaction
+      const result = await createWorkoutWithPoints(
+        {
+          weekId: week.id,
+          userId: user.id,
+          source: 'MANUAL',
+          sourceEventId,
+          occurredAt: workoutOccurredAt,
+          pointsAwarded: POINTS_PER_WORKOUT,
+          createdAt: new Date(),
+        },
+        {
+          weekId: week.id,
+          userId: user.id,
+          reason: 'workout_logged',
+          points: POINTS_PER_WORKOUT,
+          createdAt: new Date(),
+        },
+        week.id,
+        POINTS_PER_WORKOUT
+      );
 
-        // Create points ledger entry
-        await tx.pointsLedger.create({
-          data: {
-            weekId: week.id,
-            userId: user.id,
-            reason: 'workout_logged',
-            points: POINTS_PER_WORKOUT,
-          },
-        });
-
-        // Increment week currentPoints atomically
-        await tx.week.update({
-          where: { id: week.id },
-          data: {
-            currentPoints: {
-              increment: POINTS_PER_WORKOUT,
-            },
-          },
-        });
-
-        return workout;
-      });
+      // Get updated week to return current points
+      const updatedWeek = await weeks.findUnique({ id: week.id });
 
       // Return workout and trigger progress update via queue (handled by worker)
       return {
@@ -115,12 +108,12 @@ export async function workoutRoutes(fastify: FastifyInstance) {
         },
         week: {
           id: week.id,
-          currentPoints: week.currentPoints + POINTS_PER_WORKOUT,
+          currentPoints: updatedWeek?.currentPoints || week.currentPoints + POINTS_PER_WORKOUT,
         },
       };
     } catch (error: any) {
-      if (error.code === 'P2002') {
-        // Unique constraint violation (idempotency)
+      // Check for duplicate (idempotency)
+      if (error.message?.includes('already exists') || error.code === 'ALREADY_EXISTS') {
         return reply.code(409).send({ error: 'This workout has already been logged' });
       }
       fastify.log.error(error);
@@ -128,4 +121,3 @@ export async function workoutRoutes(fastify: FastifyInstance) {
     }
   });
 }
-

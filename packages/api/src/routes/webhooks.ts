@@ -1,7 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createPrismaClient } from '@forge/shared';
-
-const prisma = createPrismaClient();
+import { webhookEvents } from '@forge/shared';
 
 interface StravaWebhookBody {
   object_type?: string;
@@ -25,7 +23,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
     try {
       // Store webhook event for idempotency and processing
-      const webhookEvent = await prisma.webhookEvent.upsert({
+      const webhookEvent = await webhookEvents.upsert({
         where: {
           source_sourceEventId: {
             source: 'STRAVA',
@@ -35,12 +33,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         update: {
           // Update if already exists (shouldn't happen, but handle gracefully)
           payloadJson: JSON.stringify(payload),
+          receivedAt: new Date(),
         },
         create: {
           source: 'STRAVA',
           sourceEventId: objectId,
           status: 'PENDING',
           payloadJson: JSON.stringify(payload),
+          receivedAt: new Date(),
         },
       });
 
@@ -63,7 +63,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
     try {
       // Store webhook event for idempotency and processing
-      const webhookEvent = await prisma.webhookEvent.upsert({
+      const webhookEvent = await webhookEvents.upsert({
         where: {
           source_sourceEventId: {
             source: 'HEVY',
@@ -72,12 +72,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         },
         update: {
           payloadJson: JSON.stringify(payload),
+          receivedAt: new Date(),
         },
         create: {
           source: 'HEVY',
           sourceEventId: workoutId,
           status: 'PENDING',
           payloadJson: JSON.stringify(payload),
+          receivedAt: new Date(),
         },
       });
 
@@ -92,4 +94,3 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     }
   });
 }
-

@@ -1,13 +1,11 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
-import { createPrismaClient } from '@forge/shared';
-
-const prisma = createPrismaClient();
+import { weeks } from '@forge/shared';
 
 export async function weekRoutes(fastify: FastifyInstance) {
   // GET /weeks/current
   fastify.get('/current', async (request, reply) => {
     try {
-      const week = await prisma.week.findFirst({
+      const week = await weeks.findFirst({
         where: {
           status: {
             in: ['OPEN', 'ACTIVE'],
@@ -45,8 +43,8 @@ export async function weekRoutes(fastify: FastifyInstance) {
           commitmentMessageChannelId: week.commitmentMessageChannelId,
           commitmentMessageId: week.commitmentMessageId,
           stats: {
-            commitmentsCount: week._count.commitments,
-            workoutsCount: week._count.workouts,
+            commitmentsCount: week._count?.commitments || 0,
+            workoutsCount: week._count?.workouts || 0,
           },
         },
       };
@@ -56,4 +54,3 @@ export async function weekRoutes(fastify: FastifyInstance) {
     }
   });
 }
-

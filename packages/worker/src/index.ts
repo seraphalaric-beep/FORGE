@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
 import { Worker, Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import { createPrismaClient, POINTS_PER_WORKOUT } from '@forge/shared';
 import { processWebhookEvent } from './jobs/processWebhookEvent';
 import { updateProgressMessage } from './jobs/updateProgressMessage';
 import { weeklyOpenCommitments } from './jobs/weeklyOpenCommitments';
@@ -9,8 +8,6 @@ import { weeklyCloseCommitments } from './jobs/weeklyCloseCommitments';
 import { weeklyEndAndRecap } from './jobs/weeklyEndAndRecap';
 
 dotenv.config();
-
-const prisma = createPrismaClient();
 
 // Redis connection
 const connection = new IORedis({
@@ -62,9 +59,9 @@ const schedulerWorker = new Worker(
   'scheduler',
   async (job) => {
     if (job.name === 'weekly-end-and-open') {
-      await weeklyEndAndRecap(job.data, prisma);
+      await weeklyEndAndRecap(job);
     } else if (job.name === 'weekly-close-commitments') {
-      await weeklyCloseCommitments(job.data, prisma);
+      await weeklyCloseCommitments(job);
     }
   },
   { connection }
@@ -101,7 +98,6 @@ process.on('SIGTERM', async () => {
   await progressWorker.close();
   await schedulerWorker.close();
   await connection.quit();
-  await prisma.$disconnect();
   process.exit(0);
 });
 
@@ -110,7 +106,6 @@ process.on('SIGINT', async () => {
   await progressWorker.close();
   await schedulerWorker.close();
   await connection.quit();
-  await prisma.$disconnect();
   process.exit(0);
 });
 

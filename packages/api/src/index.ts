@@ -1,16 +1,24 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import dotenv from 'dotenv';
-import { createPrismaClient, POINTS_PER_WORKOUT } from '@forge/shared';
+import { initializeFirebase } from '@forge/shared';
 import { userRoutes } from './routes/users';
 import { weekRoutes } from './routes/weeks';
 import { commitmentRoutes } from './routes/commitments';
 import { workoutRoutes } from './routes/workouts';
 import { webhookRoutes } from './routes/webhooks';
+import { guildRoutes } from './routes/guild';
 
 dotenv.config();
 
-const prisma = createPrismaClient();
+// Initialize Firebase
+try {
+  initializeFirebase();
+  console.log('Firebase initialized');
+} catch (error) {
+  console.error('Failed to initialize Firebase:', error);
+  process.exit(1);
+}
 
 const fastify = Fastify({
   logger: true,
@@ -53,6 +61,7 @@ fastify.register(weekRoutes, { prefix: '/weeks' });
 fastify.register(commitmentRoutes, { prefix: '/commitments' });
 fastify.register(workoutRoutes, { prefix: '/workouts' });
 fastify.register(webhookRoutes, { prefix: '/webhooks' });
+fastify.register(guildRoutes, { prefix: '/guilds' });
 
 const start = async () => {
   try {
@@ -68,13 +77,11 @@ const start = async () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   await fastify.close();
-  await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   await fastify.close();
-  await prisma.$disconnect();
   process.exit(0);
 });
 

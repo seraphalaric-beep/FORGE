@@ -1,18 +1,8 @@
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { weeks, commitments, workouts, users } from '@forge/shared';
 import { weeklyOpenCommitments } from './weeklyOpenCommitments';
 
-// Note: weeklyOpenCommitments expects a Job, but we're calling it directly
-// In a real scenario, we'd create a proper job or refactor
-async function callWeeklyOpenCommitments(prisma: PrismaClient) {
-  // Create a mock job object for the function
-  const mockJob = {
-    data: {},
-  } as Job;
-  return await weeklyOpenCommitments(mockJob, prisma);
-}
-
-export async function weeklyEndAndRecap(job: Job, prisma: PrismaClient) {
+export async function weeklyEndAndRecap(job: Job) {
   try {
     // This job is called Sunday 21:00 to:
     // 1. Post recap for ending week
@@ -20,47 +10,52 @@ export async function weeklyEndAndRecap(job: Job, prisma: PrismaClient) {
     // 3. Post commitment call
 
     // Find the ACTIVE week that's ending
-    const activeWeek = await prisma.week.findFirst({
-      where: { status: 'ACTIVE' },
+    const activeWeek = await weeks.findFirst({
+      where: { status: { in: ['ACTIVE'] } },
       orderBy: { startsAt: 'desc' },
-      include: {
-        commitments: {
-          include: {
-            user: true,
-          },
-        },
-        workouts: {
-          include: {
-            user: true,
-          },
-        },
-      },
     });
 
     let recapData = null;
 
     if (activeWeek) {
       // End the week
-      await prisma.week.update({
+      await weeks.update({
         where: { id: activeWeek.id },
         data: { status: 'ENDED' },
       });
+
+      // Fetch related data
+      const [allCommitments, allWorkouts] = await Promise.all([
+        commitments.findMany({ where: { weekId: activeWeek.id } }),
+        workouts.findMany({ where: { weekId: activeWeek.id } }),
+      ]);
 
       // Calculate recap categories
       const goalAchieved = activeWeek.currentPoints >= activeWeek.goalPoints;
 
       // Group workouts by user
       const workoutsByUser = new Map<string, number>();
-      for (const workout of activeWeek.workouts) {
+      for (const workout of allWorkouts) {
         const count = workoutsByUser.get(workout.userId) || 0;
         workoutsByUser.set(workout.userId, count + 1);
       }
 
       // Group commitments by user
       const commitmentsByUser = new Map<string, number>();
-      for (const commitment of activeWeek.commitments) {
+      for (const commitment of allCommitments) {
         commitmentsByUser.set(commitment.userId, commitment.committedWorkouts);
       }
+
+      // Get unique user IDs and fetch their data
+      const uniqueUserIds = Array.from(new Set([...workoutsByUser.keys(), ...commitmentsByUser.keys()]));
+      const userPromises = uniqueUserIds.map((userId) => users.findById(userId));
+      const userResults = await Promise.all(userPromises);
+      const userMap = new Map<string, { discordId: string }>();
+      userResults.forEach((user, index) => {
+        if (user) {
+          userMap.set(uniqueUserIds[index], user);
+        }
+      });
 
       // Categorize users
       const aboveAndBeyond: Array<{ discordId: string; overCommitment: number }> = [];
@@ -69,7 +64,7 @@ export async function weeklyEndAndRecap(job: Job, prisma: PrismaClient) {
 
       for (const [userId, workoutsLogged] of workoutsByUser.entries()) {
         const committed = commitmentsByUser.get(userId) || 0;
-        const user = activeWeek.workouts.find((w) => w.userId === userId)?.user;
+        const user = userMap.get(userId);
 
         if (!user) continue;
 
@@ -100,7 +95,7 @@ export async function weeklyEndAndRecap(job: Job, prisma: PrismaClient) {
     }
 
     // Open new week
-    const newWeekData = await callWeeklyOpenCommitments(prisma);
+    const newWeekData = await weeklyOpenCommitments(job);
 
     return {
       recap: recapData,
@@ -112,4 +107,3 @@ export async function weeklyEndAndRecap(job: Job, prisma: PrismaClient) {
     throw error;
   }
 }
-

@@ -7,17 +7,13 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "echo \"Tests in shared package\" && exit 0",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "test": "echo \"Tests in shared package\" && exit 0"
   },
   "dependencies": {
-    "@prisma/client": "^5.9.1"
+    "firebase-admin": "^12.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "prisma": "^5.9.1",
     "typescript": "^5.3.3"
   }
 }

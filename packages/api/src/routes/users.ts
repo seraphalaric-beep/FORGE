@@ -1,7 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { createPrismaClient } from '@forge/shared';
-
-const prisma = createPrismaClient();
+import { users, weeks, commitments, workouts, DEFAULT_TIMEZONE } from '@forge/shared';
 
 interface JoinBody {
   discordId: string;
@@ -25,12 +23,14 @@ export async function userRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const user = await prisma.user.upsert({
+      const user = await users.upsert({
         where: { discordId },
         update: { isActive: true },
         create: {
           discordId,
           isActive: true,
+          joinedAt: new Date(),
+          timezone: DEFAULT_TIMEZONE,
         },
       });
 
@@ -50,14 +50,14 @@ export async function userRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const user = await prisma.user.update({
+      const user = await users.update({
         where: { discordId },
         data: { isActive: false },
       });
 
       return { user };
-    } catch (error) {
-      if ((error as any).code === 'P2025') {
+    } catch (error: any) {
+      if (error.message === 'User not found') {
         return reply.code(404).send({ error: 'User not found' });
       }
       fastify.log.error(error);
@@ -70,29 +70,14 @@ export async function userRoutes(fastify: FastifyInstance) {
     const { discordId } = request.params;
 
     try {
-      const user = await prisma.user.findUnique({
-        where: { discordId },
-        include: {
-          commitments: {
-            include: {
-              week: true,
-            },
-            orderBy: {
-              week: {
-                startsAt: 'desc',
-              },
-            },
-            take: 1,
-          },
-        },
-      });
+      const user = await users.findUnique({ discordId });
 
       if (!user) {
         return reply.code(404).send({ error: 'User not found' });
       }
 
       // Get current week
-      const currentWeek = await prisma.week.findFirst({
+      const currentWeek = await weeks.findFirst({
         where: {
           status: {
             in: ['OPEN', 'ACTIVE'],
@@ -117,17 +102,15 @@ export async function userRoutes(fastify: FastifyInstance) {
       }
 
       // Get user's commitment for current week
-      const commitment = await prisma.commitment.findUnique({
-        where: {
-          userId_weekId: {
-            userId: user.id,
-            weekId: currentWeek.id,
-          },
+      const commitment = await commitments.findUnique({
+        userId_weekId: {
+          userId: user.id,
+          weekId: currentWeek.id,
         },
       });
 
       // Get user's workouts for current week
-      const workouts = await prisma.workout.findMany({
+      const userWorkouts = await workouts.findMany({
         where: {
           weekId: currentWeek.id,
           userId: user.id,
@@ -135,7 +118,7 @@ export async function userRoutes(fastify: FastifyInstance) {
       });
 
       // Get community progress
-      const totalWorkouts = await prisma.workout.count({
+      const totalWorkouts = await workouts.count({
         where: {
           weekId: currentWeek.id,
         },
@@ -158,7 +141,7 @@ export async function userRoutes(fastify: FastifyInstance) {
               updatedAt: commitment.updatedAt,
             }
           : null,
-        workoutsThisWeek: workouts.length,
+        workoutsThisWeek: userWorkouts.length,
         communityProgress: {
           goalPoints: currentWeek.goalPoints,
           currentPoints: currentWeek.currentPoints,
@@ -171,4 +154,3 @@ export async function userRoutes(fastify: FastifyInstance) {
     }
   });
 }
-

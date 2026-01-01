@@ -19,7 +19,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "date-fns": "^3.3.1",
-    "date-fns-tz": "^2.0.0",
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^16.4.1",
     "prettier": "^3.2.4",
     "tsx": "^4.7.1",
